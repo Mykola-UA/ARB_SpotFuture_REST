@@ -95,7 +95,7 @@ def build_exchange_links(arb):
 
 def build_blur_exchange_links(arb):
     buttons = [
-        InlineKeyboardButton(f"🔻 Купити на {blur(arb['buy_exchange'])}", url="https://t.me/your_bot?start=subscribe"),
-        InlineKeyboardButton(f"🔺 Продати на {blur(arb['sell_exchange'])}", url="https://t.me/your_bot?start=subscribe")
+        InlineKeyboardButton(f"🔻 Купити на {blur(arb['buy_exchange'])}", url=""),  # прибрав посилання на your_bot
+        InlineKeyboardButton(f"🔺 Продати на {blur(arb['sell_exchange'])}", url="")
     ]
     return InlineKeyboardMarkup([buttons])
