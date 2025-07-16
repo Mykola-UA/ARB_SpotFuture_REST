@@ -1,165 +1,101 @@
-import asyncio
 import os
-import sys
-import time
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
-
-from config import (
-    USDT_PRICE, DAYS,
-    is_admin, is_paid, set_paid, get_status, get_users
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ContextTypes,
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
 )
-from core.price_collector import get_bad_exchanges
-from core.arbitrage_runner import arbitrage_loop, stop_arbitrage_loop
 from utils.cryptopay_api import create_cryptopay_invoice
+from utils.webhook import load_invoices, save_invoices
+from config import TARIFFS
 
-arbitrage_task = None
+# /start — головне меню
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
 
-async def user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_chat.id
-
-    if is_admin(user_id):
-        await update.message.reply_text(
-            "👮 Admin Menu:\n"
-            "/startbot - Start Arbitrage\n"
-            "/stopbot - Stop Arbitrage\n"
-            "/status - Check Bot Status\n"
-            "/badex - Show Bad Exchanges\n"
-            "/restart - Restart Bot"
-        )
-    else:
-        keyboard = [
-            [InlineKeyboardButton("▶️ START", callback_data="show_status")],
-            [InlineKeyboardButton("💎 Subscribe", callback_data="subscribe")],
-            [InlineKeyboardButton("❓ Help", callback_data="show_help")]
-        ]
-        markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "Welcome! Subscribe to see signals from just 1 USDT.",
-            reply_markup=markup
-        )
-
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    user_id = query.message.chat_id
-
-    if data == "show_status":
-        await query.edit_message_text(get_status(user_id))
-
-    elif data == "subscribe":
-        buttons = [
-            [InlineKeyboardButton("1 USDT - 1 Day", callback_data="sub_1")],
-            [InlineKeyboardButton("7 USDT - 7 Days", callback_data="sub_7")],
-            [InlineKeyboardButton("30 USDT - 30 Days", callback_data="sub_30")],
-        ]
-        await query.edit_message_text(
-            "Choose a subscription plan:",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-
-    elif data in ("sub_1", "sub_7", "sub_30"):
-        days = DAYS[data]
-        price = USDT_PRICE[data]
-        buttons = [
-            [InlineKeyboardButton("💸 Pay USDT via CryptoBot", callback_data=f"{data}_CRYPTOPAY")],
-            [InlineKeyboardButton("💳 Buy USDT with Card (CryptoBot)", url="https://t.me/CryptoBot?start=buy")]
-        ]
-        await query.edit_message_text(
-            f"<b>Choose how to pay for your subscription ({price} USDT for {days} day(s)):</b>\n\n"
-            "<b>💸 Pay USDT via CryptoBot:</b>\n"
-            "- Use your existing USDT in @CryptoBot wallet to pay instantly and securely.\n\n"
-            "<b>💳 Buy USDT with Card (CryptoBot):</b>\n"
-            "- If you don’t have USDT, you can buy crypto directly in Telegram using your card (Visa/Mastercard, Apple Pay, Google Pay).\n"
-            "- After purchase, come back here and use the first button to pay for your subscription.\n\n"
-            "<i>Tip: USDT payment via CryptoBot is instant and with no extra fees.</i>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-
-    elif any(data.startswith(sub) for sub in ("sub_1_", "sub_7_", "sub_30_")):
-        sub_type, network = data.rsplit("_", 1)
-        price = USDT_PRICE[sub_type]
-        days = DAYS[sub_type]
-        if network.upper() == "CRYPTOPAY":
-            try:
-                pay_url, invoice_id = create_cryptopay_invoice(user_id, price, asset="USDT")
-                await query.edit_message_text(
-                    f"To activate your <b>{days} day(s)</b> subscription:\n"
-                    f"Pay <b>{price} USDT</b> via <b>CryptoBot</b> using the link below:\n\n"
-                    f"<a href='{pay_url}'>💸 Click here to pay USDT via CryptoBot</a>\n\n"
-                    "<i>Your subscription will be activated automatically after payment!</i>",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                await query.edit_message_text(
-                    f"Error creating invoice via CryptoBot:\n<code>{e}</code>",
-                    parse_mode="HTML"
-                )
-        else:
-            await query.edit_message_text("Unknown payment method.")
-
-    elif data == "show_help":
-        await query.edit_message_text(
-            "This bot sends profitable arbitrage signals from top exchanges. Subscribe to unlock full access!"
-        )
-    else:
-        await query.edit_message_text("Unknown action.")
-
-async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("💸 Оплата USDT", callback_data="pay_usdt")],
+        [InlineKeyboardButton("💳 Купити USDT карткою", callback_data="buy_usdt_card")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "Please pay using the CryptoBot buttons in the menu. Your subscription is activated automatically after payment."
+        "👋 Вітаємо!\n\n"
+        "Щоб отримати доступ до сигналів, оберіть спосіб оплати:",
+        reply_markup=markup
     )
 
-# Admin commands
-async def startbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global arbitrage_task
-    if not is_admin(update.effective_chat.id):
-        await update.message.reply_text("⛔ Admins only!")
-        return
-    if arbitrage_task and not arbitrage_task.done():
-        await update.message.reply_text("✅ Already running.")
-        return
-    await update.message.reply_text("🟢 Started.")
-    arbitrage_task = asyncio.create_task(arbitrage_loop(context.application))
+# Обробка callback кнопок
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
 
-async def stopbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global arbitrage_task
-    if not is_admin(update.effective_chat.id):
-        await update.message.reply_text("⛔ Admins only!")
-        return
-    if not arbitrage_task or arbitrage_task.done():
-        await update.message.reply_text("❌ Not running.")
-        return
-    stop_arbitrage_loop()
-    arbitrage_task.cancel()
-    await update.message.reply_text("🛑 Stopped.")
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global arbitrage_task
-    if not is_admin(update.effective_chat.id):
-        await update.message.reply_text("⛔ Admins only!")
-        return
-    active = sum(1 for u in get_users().values() if is_paid(u))
-    if arbitrage_task and not arbitrage_task.done():
-        await update.message.reply_text(f"✅ Running.\nActive subscriptions: {active}")
+    if data == "pay_usdt":
+        await pay_usdt_handler(query, context)
+    elif data == "buy_usdt_card":
+        await buy_usdt_card_handler(query, context)
+    elif data == "already_paid":
+        await query.answer("Після оплати інвойсу підписка активується автоматично. Зазвичай це займає 1-2 хвилини.")
     else:
-        await update.message.reply_text(f"❌ Not running.\nActive subscriptions: {active}")
+        await query.answer("Невідома дія.")
 
-async def badex(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_chat.id):
-        await update.message.reply_text("⛔ Admins only!")
-        return
-    bad = get_bad_exchanges()
-    if not bad:
-        await update.message.reply_text("✅ All exchanges OK.")
-    else:
-        await update.message.reply_text("❗ Problem exchanges:\n" + "\n".join(bad))
+# Створення інвойсу CryptoPay та кнопки для оплати USDT
+async def pay_usdt_handler(query, context):
+    user_id = query.from_user.id
+    sub_type = "sub_7"         # Можна додати вибір тарифу
+    price = TARIFFS[sub_type]
 
-async def restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_chat.id):
-        await update.message.reply_text("⛔ Admins only!")
-        return
-    await update.message.reply_text("🔄 Restarting...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    # Створити invoice через CryptoPay
+    pay_url, invoice_id = create_cryptopay_invoice(
+        user_id, price, asset="USDT", description=f"Subscription for {user_id} {sub_type}"
+    )
+
+    # Зберігаємо invoice_id ↔ user_id + tariff
+    invoices_map = load_invoices()
+    invoices_map[invoice_id] = {
+        "user_id": user_id,
+        "tariff": sub_type
+    }
+    save_invoices(invoices_map)
+
+    keyboard = [
+        [InlineKeyboardButton("💸 Оплатити через CryptoBot", url=pay_url)],
+        [InlineKeyboardButton("Вже оплатив", callback_data="already_paid")]
+    ]
+    markup = InlineKeyboardMarkup(keyboard)
+
+    await query.message.reply_text(
+        "1️⃣ Натисніть <b>«Оплатити через CryptoBot»</b> (відкриється @CryptoBot)\n"
+        "2️⃣ Проведіть оплату USDT\n"
+        "3️⃣ Поверніться у цей бот — підписка активується автоматично!\n\n"
+        "<i>Якщо вже оплатили — натисніть кнопку «Вже оплатив».</i>",
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+    await query.answer()
+
+# Інструкція для тих, хто хоче купити USDT карткою
+async def buy_usdt_card_handler(query, context):
+    await query.message.reply_text(
+        "💳 Щоб оплатити карткою:\n"
+        "1. Придбайте USDT через будь-яку біржу або сервіс (наприклад, Binance P2P, WhiteBIT, Kuna, BestChange).\n"
+        "2. Поверніться до цього бота й оплатіть через кнопку «Оплата USDT»."
+    )
+    await query.answer()
+
+# (Додай інші хендлери, якщо потрібно)
+
+# === Ініціалізація бота (тільки приклад) ===
+def main():
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    # Додай інші хендлери
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()

@@ -1,11 +1,11 @@
 import json
-from datetime import datetime, timezone, timedelta
+import time
 
 USERS_FILE = "users.json"
 
-def get_users():
+def load_users():
     try:
-        with open(USERS_FILE) as f:
+        with open(USERS_FILE, "r") as f:
             return json.load(f)
     except Exception:
         return {}
@@ -14,51 +14,67 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
-def is_admin(chat_id, admin_list=None):
-    # admin_list: список або set айдішників, передавати з config
-    if admin_list:
-        return str(chat_id) in admin_list or int(chat_id) in admin_list
-    from config import ADMIN_CHAT_IDS
-    return int(chat_id) in ADMIN_CHAT_IDS
+def set_paid(user_id, days):
+    """
+    Активує підписку для користувача на N днів з сьогоднішнього дня.
+    """
+    user_id = str(user_id)
+    users = load_users()
+    now = int(time.time())
+    days_sec = days * 24 * 60 * 60
+    paid_until = now + days_sec
 
-def set_paid(chat_id, days):
-    """
-    Додає до існуючої підписки ще N днів (навіть якщо не закінчилась).
-    Завжди округляє до 0:00 UTC.
-    """
-    users = get_users()
-    now = datetime.now(timezone.utc)
-    base_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    current = users.get(str(chat_id), {}).get("paid_until")
-    if current:
-        current_until = datetime.strptime(current, "%Y-%m-%d")
-        if current_until > base_date:
-            base_date = current_until
-    paid_until = (base_date + timedelta(days=int(days))).strftime("%Y-%m-%d")
-    users[str(chat_id)] = users.get(str(chat_id), {})
-    users[str(chat_id)]["paid_until"] = paid_until
+    # Якщо підписка ще активна — продовжуємо її, а не перезаписуємо!
+    if user_id in users and users[user_id].get("paid_until", 0) > now:
+        paid_until = users[user_id]["paid_until"] + days_sec
+
+    users[user_id] = {
+        "paid": True,
+        "paid_until": paid_until,
+        "last_payment": now,
+    }
     save_users(users)
+    print(f"🔔 User {user_id} subscription set to {paid_until} ({days} днів)")
 
-def is_paid(chat_id):
-    users = get_users()
-    info = users.get(str(chat_id), {})
-    paid_until = info.get("paid_until")
-    if paid_until:
-        now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        until = datetime.strptime(paid_until, "%Y-%m-%d")
-        return until > now
-    return False
+def is_paid(user_id):
+    """
+    Перевіряє, чи є активна підписка у користувача.
+    """
+    user_id = str(user_id)
+    users = load_users()
+    now = int(time.time())
+    info = users.get(user_id)
+    if not info:
+        return False
+    return info.get("paid", False) and info.get("paid_until", 0) > now
 
-def get_status(chat_id):
-    users = get_users()
-    info = users.get(str(chat_id), {})
-    paid_until = info.get("paid_until")
-    if paid_until:
-        now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        until = datetime.strptime(paid_until, "%Y-%m-%d")
-        days = (until - now).days
-        if days > 0:
-            return f"✅ Active until {paid_until} ({days} day{'s' if days > 1 else ''})"
-        else:
-            return "❌ Subscription not active"
-    return "❌ No subscription"
+def get_paid_until(user_id):
+    """
+    Повертає timestamp закінчення підписки або None.
+    """
+    user_id = str(user_id)
+    users = load_users()
+    info = users.get(user_id)
+    if not info:
+        return None
+    return info.get("paid_until")
+
+def get_days_left(user_id):
+    """
+    Повертає кількість днів до кінця підписки (може бути float).
+    """
+    paid_until = get_paid_until(user_id)
+    if not paid_until:
+        return 0
+    now = int(time.time())
+    left = paid_until - now
+    return max(left / (24 * 60 * 60), 0)
+
+# (опціонально) Функція для адміністраторів — скинути підписку
+def reset_subscription(user_id):
+    users = load_users()
+    if str(user_id) in users:
+        del users[str(user_id)]
+        save_users(users)
+        print(f"🔔 User {user_id} subscription RESET")
+

@@ -3,7 +3,7 @@ EXCHANGE_FEES = {
     "bitget": 0.1,
     "bitmart": 0.2,
     "bybit": 0.1,
-    "coinex": 0.2,
+   "coinex": 0.2,
     "gate": 0.2,
     "htx": 0.2,
     "kucoin": 0.1,
