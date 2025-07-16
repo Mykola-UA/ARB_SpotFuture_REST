@@ -5,3 +5,5 @@ pandas
 python-dotenv
 streamlit
 requests
+fastapi
+uvicorn
