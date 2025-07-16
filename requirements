@@ -7,3 +7,4 @@ streamlit
 requests
 fastapi
 uvicorn
+python-telegram-bot
