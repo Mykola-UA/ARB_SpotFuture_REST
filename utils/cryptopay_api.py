@@ -1,56 +1,115 @@
-import os
 import requests
+import os
 
-CRYPTOPAY_API_TOKEN = os.getenv("CRYPTO_PAY_API_TOKEN")
-CRYPTOPAY_API_URL = "https://api.cryptopay.me/v1/invoices"
+CRYPTO_PAY_API_TOKEN = os.getenv("CRYPTO_PAY_API_TOKEN")  # Додай у .env
 
-
-def create_cryptopay_invoice(user_id, amount, asset="USDT", description=None):
+def create_cryptopay_invoice(user_id, amount, asset="USDT"):
     """
-    Створює інвойс для оплати через CryptoBot та повертає pay_url і invoice_id.
-    :param user_id: int або str — ID користувача Telegram (для ідентифікації)
-    :param amount: float або int — сума оплати у валюті asset
-    :param asset: str — токен оплати (USDT, TON, BTC, ETH, і т.д.)
-    :param description: str — текст для description інвойсу (відображається у @CryptoBot)
-    :return: (pay_url, invoice_id)
+    Створює інвойс на оплату через CryptoPay (Telegram @CryptoBot)
     """
-    if not CRYPTOPAY_API_TOKEN:
-        raise RuntimeError("Не задано CRYPTO_PAY_API_TOKEN у змінних оточення!")
-
-    headers = {"Crypto-Pay-API-Token": CRYPTOPAY_API_TOKEN}
-    data = {
-        "asset": asset,
-        "amount": str(amount),
-        "description": description or f"Subscription for {user_id}",
-        "hidden_message": "Дякуємо за оплату! Поверніться у бот для активації підписки.",
-        # Можна додати "payload": f"user_{user_id}", якщо хочеш відслідковувати user_id як payload
+    url = "https://api.cryptopay.me/v1/invoices"
+    headers = {
+        "Content-Type": "application/json",
+        "Crypto-Pay-API-Token": CRYPTO_PAY_API_TOKEN
     }
-    resp = requests.post(CRYPTOPAY_API_URL, json=data, headers=headers, timeout=20)
-    resp.raise_for_status()
-    jdata = resp.json()
+    data = {
+        "amount": float(amount),
+        "asset": asset,
+        "description": f"Subscription for {user_id}",
+        "hidden_message": f"Дякуємо за оплату! Підписка буде активована автоматично."
+    }
+    resp = requests.post(url, json=data, headers=headers)
+    r = resp.json()
+    if r.get('ok'):
+        return r['result']['pay_url'], r['result']['invoice_id']
+    else:
+        raise Exception(r.get('description', 'Unknown CryptoPay error'))
 
-    if not jdata.get("ok"):
-        raise RuntimeError(f"CryptoPay API error: {jdata}")
 
-    invoice = jdata["result"]
-    pay_url = invoice["pay_url"]
-    invoice_id = invoice["invoice_id"]
-    return pay_url, invoice_id
+core/arbitrage_runner.py
 
+import asyncio
+import json
+import os
+from datetime import datetime, timezone, timedelta
 
-# Опціонально: функція для перевірки статусу інвойсу (якщо треба вручну)
-def check_invoice_status(invoice_id):
-    """
-    Перевіряє статус інвойсу через CryptoPay API.
-    :param invoice_id: str
-    :return: статус (наприклад, "active", "paid", "expired")
-    """
-    url = f"https://api.cryptopay.me/v1/invoices/{invoice_id}"
-    headers = {"Crypto-Pay-API-Token": CRYPTOPAY_API_TOKEN}
-    resp = requests.get(url, headers=headers, timeout=20)
-    resp.raise_for_status()
-    jdata = resp.json()
-    if not jdata.get("ok"):
-        raise RuntimeError(f"CryptoPay API error: {jdata}")
-    invoice = jdata["result"]
-    return invoice["status"]
+from core.price_collector import fetch_live_prices, reset_bad_exchanges_log_daily
+from core.arbitrage_engine import find_arbitrage_opportunities
+from notify.telegram_notify import (
+    format_arb_message, format_arb_message_blur,
+    build_exchange_links, build_blur_exchange_links,
+)
+from config import is_admin, is_paid, get_users, MIN_PROFIT
+
+SENT_SIGNALS_TIME_FILE = "sent_signals_time.json"
+ANTI_DUPLICATE_MINUTES = 60  # не дублювати мінімум 60 хв
+
+def make_signal_id(arb):
+    # Тільки унікальна пара: symbol|buy_exchange|sell_exchange|type_buy|type_sell
+    return f"{arb['symbol']}|{arb['buy_exchange']}|{arb['sell_exchange']}|{arb.get('type_buy','')}|{arb.get('type_sell','')}"
+
+def load_sent_signals_time():
+    try:
+        with open(SENT_SIGNALS_TIME_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_sent_signals_time(data):
+    with open(SENT_SIGNALS_TIME_FILE, "w") as f:
+        json.dump(data, f)
+
+_run_flag = True
+
+def stop_arbitrage_loop():
+    global _run_flag
+    _run_flag = False
+
+async def arbitrage_loop(app):
+    global _run_flag
+    _run_flag = True
+    while _run_flag:
+        reset_bad_exchanges_log_daily()
+
+        sent_signals_time = load_sent_signals_time()
+        now = datetime.now(timezone.utc)
+
+        spot_data = fetch_live_prices()
+        arbs = find_arbitrage_opportunities(spot_data)
+        arbs_profitable = [arb for arb in arbs if arb["net_profit"] > MIN_PROFIT]
+        users = get_users()
+
+        for arb in arbs_profitable:
+            signal_id = make_signal_id(arb)
+            last_time_str = sent_signals_time.get(signal_id)
+            skip = False
+            if last_time_str:
+                try:
+                    last_time = datetime.fromisoformat(last_time_str)
+                    if now - last_time < timedelta(minutes=ANTI_DUPLICATE_MINUTES):
+                        skip = True
+                except Exception:
+                    pass
+            if skip:
+                continue  # Не дублювати сигнал!
+
+            for chat_id in users:
+                if is_admin(chat_id) or is_paid(chat_id):
+                    msg = format_arb_message(arb)
+                    markup = build_exchange_links(arb)
+                else:
+                    msg = format_arb_message_blur(arb)
+                    markup = build_blur_exchange_links(arb)
+                try:
+                    await app.bot.send_message(
+                        chat_id=int(chat_id),
+                        text=msg, parse_mode="HTML", reply_markup=markup
+                    )
+                except Exception as e:
+                    print(f"❌ Не вдалося надіслати {chat_id}: {e}")
+            # Зберігаємо час відправки для цієї пари
+            sent_signals_time[signal_id] = now.isoformat()
+
+        save_sent_signals_time(sent_signals_time)
+        await asyncio.sleep(60)
+

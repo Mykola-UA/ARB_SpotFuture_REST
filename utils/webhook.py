@@ -60,3 +60,4 @@ async def cryptopay_webhook(request: Request):
         print(f"✅ Subscription activated for user {user_id} ({days} days) by invoice {invoice_id}")
         return {"ok": True}
     return {"ok": True}
+
