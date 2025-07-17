@@ -15,10 +15,6 @@ def save_subscriptions(subs):
         json.dump(subs, f, indent=2)
 
 def set_paid(user_id, days):
-    """
-    Активує/продовжує підписку на N днів для user_id.
-    Якщо вже є підписка — додає дні до поточного paid_until.
-    """
     user_id = str(user_id)
     subs = load_subscriptions()
     now = datetime.utcnow()
@@ -36,9 +32,6 @@ def set_paid(user_id, days):
     save_subscriptions(subs)
 
 def is_paid(user_id):
-    """
-    Перевіряє, чи підписка ще активна для user_id.
-    """
     user_id = str(user_id)
     subs = load_subscriptions()
     now = datetime.utcnow()
@@ -55,16 +48,10 @@ def get_paid_until(user_id):
     return None
 
 def get_users():
-    """
-    Повертає всі chat_id (user_id) з підписок.
-    """
     subs = load_subscriptions()
     return list(subs.keys())
 
 def get_status(user_id):
-    """
-    Повертає текстовий статус підписки для user_id (для меню/status).
-    """
     paid_until = get_paid_until(user_id)
     if paid_until:
         now = datetime.utcnow()
@@ -77,7 +64,4 @@ def get_status(user_id):
     return "❌ No subscription"
 
 def get_all_subscriptions():
-    """
-    Повертає весь словник з підписками.
-    """
     return load_subscriptions()

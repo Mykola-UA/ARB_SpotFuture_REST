@@ -11,8 +11,9 @@ from telegram.ext import ContextTypes
 
 from config import (
     USDT_PRICE, DAYS,
-    is_admin, is_paid, set_paid, get_status, get_users
+    is_admin, MIN_PROFIT
 )
+from notify.subscriptions import set_paid, is_paid, get_users, get_status
 from core.price_collector import get_bad_exchanges
 from core.arbitrage_runner import arbitrage_loop, stop_arbitrage_loop
 from utils.cryptopay_api import create_cryptopay_invoice
@@ -79,9 +80,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(buttons)
         )
 
-    # Обробка кнопки CryptoPay
     elif any(data.startswith(sub) and data.endswith("_CRYPTOPAY") for sub in ("sub_1", "sub_7", "sub_30")):
-        sub_type = data.split("_")[0] + "_" + data.split("_")[1]  # e.g. sub_1
+        sub_type = data.split("_")[0] + "_" + data.split("_")[1]
         price = USDT_PRICE[sub_type]
         days = DAYS[sub_type]
         try:
@@ -99,10 +99,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
 
-    # Обробка кнопки STARS
     elif any(data.startswith(sub) and data.endswith("_STARS") for sub in ("sub_1", "sub_7", "sub_30")):
-        sub_type = data.split("_")[0] + "_" + data.split("_")[1]  # e.g. sub_1
-        price_stars = int(float(USDT_PRICE[sub_type]) * 143)  # З урахуванням комісії, можна скорегувати
+        sub_type = data.split("_")[0] + "_" + data.split("_")[1]
+        price_stars = int(float(USDT_PRICE[sub_type]) * 143)
         days = DAYS[sub_type]
 
         title = f"Arbitrage Signals Subscription ({days} days)"
@@ -116,7 +115,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             title=title,
             description=description,
             payload=payload,
-            provider_token="STARS",  # Telegram Stars (офіційний)
+            provider_token="STARS",
             currency=currency,
             prices=prices,
             start_parameter="stars_subscription"
@@ -134,7 +133,6 @@ async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Please pay using the menu. Your subscription is activated automatically after payment."
     )
 
-# Admin commands
 async def startbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global arbitrage_task
     if not is_admin(update.effective_chat.id):
@@ -163,7 +161,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_chat.id):
         await update.message.reply_text("⛔ Admins only!")
         return
-    active = sum(1 for u in get_users().values() if is_paid(u))
+    active = sum(1 for u in get_users() if is_paid(u))
     if arbitrage_task and not arbitrage_task.done():
         await update.message.reply_text(f"✅ Running.\nActive subscriptions: {active}")
     else:
