@@ -20,7 +20,9 @@ from bot.handlers import (
     badex,
     restart
 )
-from notify.subscriptions import set_paid, DAYS
+from notify.subscriptions import set_paid
+from config import DAYS
+
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
