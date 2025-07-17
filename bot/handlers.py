@@ -1,7 +1,12 @@
 import asyncio
 import os
 import sys
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import (
+    Update,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    LabeledPrice,
+)
 from telegram.ext import ContextTypes
 
 from config import (
@@ -13,16 +18,6 @@ from core.arbitrage_runner import arbitrage_loop, stop_arbitrage_loop
 from utils.cryptopay_api import create_cryptopay_invoice
 
 arbitrage_task = None
-
-# --- Вставка: функція нотифікації для всіх адміністраторів ---
-ADMIN_CHAT_IDS = [int(x) for x in os.getenv("ADMIN_CHAT_IDS", "").split(",") if x.strip()]
-
-async def notify_admins(context: ContextTypes.DEFAULT_TYPE, message: str):
-    for admin_id in ADMIN_CHAT_IDS:
-        try:
-            await context.bot.send_message(chat_id=admin_id, text=message)
-        except Exception as e:
-            print(f"❌ Не вдалося надіслати адміну {admin_id}: {e}")
 
 async def user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_chat.id
@@ -73,41 +68,59 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = USDT_PRICE[data]
         buttons = [
             [InlineKeyboardButton("💸 Pay USDT via CryptoBot", callback_data=f"{data}_CRYPTOPAY")],
-            [InlineKeyboardButton("💳 Buy USDT with Card (CryptoBot)", url="https://t.me/CryptoBot?start=buy")]
+            [InlineKeyboardButton("⭐ Pay with STARS", callback_data=f"{data}_STARS")]
         ]
         await query.edit_message_text(
-            f"<b>Choose how to pay for your subscription ({price} USDT for {days} day(s)):</b>\n\n"
-            "<b>💸 Pay USDT via CryptoBot:</b>\n"
-            "- Use your existing USDT in @CryptoBot wallet to pay instantly and securely.\n\n"
-            "<b>💳 Buy USDT with Card (CryptoBot):</b>\n"
-            "- If you don’t have USDT, you can buy crypto directly in Telegram using your card (Visa/Mastercard, Apple Pay, Google Pay).\n"
-            "- After purchase, come back here and use the first button to pay for your subscription.\n\n"
-            "<i>Tip: USDT payment via CryptoBot is instant and with no extra fees.</i>",
+            f"<b>Choose how to pay for your subscription ({price} USDT / {days} day(s)):</b>\n"
+            "- 💸 USDT: instant payment with CryptoBot\n"
+            "- ⭐ STARS: pay via Telegram (Apple Pay/Google Pay/Credit Card)\n\n"
+            "<i>After payment, your subscription is activated automatically.</i>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
 
-    elif any(data.startswith(sub) for sub in ("sub_1_", "sub_7_", "sub_30_")):
-        sub_type, network = data.rsplit("_", 1)
+    # Обробка кнопки CryptoPay
+    elif any(data.startswith(sub) and data.endswith("_CRYPTOPAY") for sub in ("sub_1", "sub_7", "sub_30")):
+        sub_type = data.split("_")[0] + "_" + data.split("_")[1]  # e.g. sub_1
         price = USDT_PRICE[sub_type]
         days = DAYS[sub_type]
-        if network.upper() == "CRYPTOPAY":
-            try:
-                pay_url, invoice_id = create_cryptopay_invoice(user_id, price, asset="USDT")
-                await query.edit_message_text(
-                    f"To activate your <b>{days} day(s)</b> subscription:\n"
-                    f"Pay <b>{price} USDT</b> via <b>CryptoBot</b> using the link below:\n\n"
-                    f"<a href='{pay_url}'>💸 Click here to pay USDT via CryptoBot</a>\n\n"
-                    "<i>Your subscription will be activated automatically after payment!</i>",
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                await query.edit_message_text(
-                    f"Error creating invoice via CryptoBot:\n<code>{e}</code>",
-                    parse_mode="HTML"
-                )
-        else:
-            await query.edit_message_text("Unknown payment method.")
+        try:
+            pay_url, invoice_id = create_cryptopay_invoice(user_id, price, asset="USDT")
+            await query.edit_message_text(
+                f"To activate your <b>{days} day(s)</b> subscription:\n"
+                f"Pay <b>{price} USDT</b> via <b>CryptoBot</b> using the link below:\n\n"
+                f"<a href='{pay_url}'>💸 Click here to pay USDT via CryptoBot</a>\n\n"
+                "<i>Your subscription will be activated automatically after payment!</i>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await query.edit_message_text(
+                f"Error creating invoice via CryptoBot:\n<code>{e}</code>",
+                parse_mode="HTML"
+            )
+
+    # Обробка кнопки STARS
+    elif any(data.startswith(sub) and data.endswith("_STARS") for sub in ("sub_1", "sub_7", "sub_30")):
+        sub_type = data.split("_")[0] + "_" + data.split("_")[1]  # e.g. sub_1
+        price_stars = int(float(USDT_PRICE[sub_type]) * 143)  # З урахуванням комісії, можна скорегувати
+        days = DAYS[sub_type]
+
+        title = f"Arbitrage Signals Subscription ({days} days)"
+        description = f"Доступ до арбітражних сигналів на {days} днів"
+        payload = f"{sub_type}_stars_{user_id}"
+        currency = "STARS"
+        prices = [LabeledPrice(f"{days} days subscription", price_stars)]
+
+        await context.bot.send_invoice(
+            chat_id=user_id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="STARS",  # Telegram Stars (офіційний)
+            currency=currency,
+            prices=prices,
+            start_parameter="stars_subscription"
+        )
 
     elif data == "show_help":
         await query.edit_message_text(
@@ -118,7 +131,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Please pay using the CryptoBot buttons in the menu. Your subscription is activated automatically after payment."
+        "Please pay using the menu. Your subscription is activated automatically after payment."
     )
 
 # Admin commands
@@ -144,8 +157,6 @@ async def stopbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stop_arbitrage_loop()
     arbitrage_task.cancel()
     await update.message.reply_text("🛑 Stopped.")
-    # --- Повідомлення всім адміністраторам ---
-    await notify_admins(context, f"🛑 Арбітраж зупинено адміністратором {update.effective_chat.id}")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global arbitrage_task
