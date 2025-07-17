@@ -10,10 +10,8 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 ADMIN_IDS = os.getenv("ADMIN_CHAT_IDS", "")
 ADMIN_CHAT_IDS = set(int(x) for x in ADMIN_IDS.split(",") if x.strip().isdigit())
 
-
 def is_admin(chat_id):
     return int(chat_id) in ADMIN_CHAT_IDS
-
 
 # --- Subscription/Payment Settings ---
 
@@ -26,19 +24,17 @@ USDT_PRICE = {
     "sub_7": 7,
     "sub_30": 30
 }
-
 DAYS = {
-    "sub_1": "1",
-    "sub_7": "7",
-    "sub_30": "30"
+    "sub_1": 1,
+    "sub_7": 7,
+    "sub_30": 30
 }
 
 # --- Subscription Functions (підключення) ---
-from notify.subscriptions import set_paid, is_paid, get_users, get_status
+from notify.subscriptions import set_paid, is_paid, get_users
 
 # --- Мінімальний % прибутку для сигналу ---
 MIN_PROFIT = float(os.getenv("MIN_PROFIT", "3"))
-
 
 # --- Language functions (залишено для локалізації, якщо треба) ---
 def tr(key, lang="en", **kwargs):
@@ -52,19 +48,14 @@ def tr(key, lang="en", **kwargs):
     text = texts.get(key, key)
     return text.format(**kwargs)
 
-
 def get_lang(chat_id):
     return "en"
-
 
 def set_lang(chat_id, lang):
     pass
 
-
 def detect_lang(update):
     return "en"
 
-
 # --- Шлях до файлу invoice mapping для webhook (CryptoPay) ---
 INVOICES_FILE = os.getenv("INVOICES_FILE", "invoices.json")
-
