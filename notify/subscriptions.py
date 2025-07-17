@@ -63,7 +63,7 @@ def get_users():
 
 def get_status(user_id):
     """
-    Повертає текстовий статус підписки для user_id (для меню).
+    Повертає текстовий статус підписки для user_id (для меню/status).
     """
     paid_until = get_paid_until(user_id)
     if paid_until:
