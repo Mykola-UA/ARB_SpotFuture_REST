@@ -14,10 +14,11 @@ def exchange_icon(ex_type):
     return ""
 
 def format_arb_message(arb):
+    # Тут було arb.get(' ') — це завжди None! Має бути 'type_buy'/'type_sell'
     return (
         f"📈 <b>{arb['symbol']}</b>\n"
-        f"🔻 <b>BUY:</b> {arb['buy_exchange']}  — ${arb['buy_price']} {exchange_icon(arb.get(' '))}\n"
-        f"🔺 <b>SELL:</b> {arb['sell_exchange']} — ${arb['sell_price']} {exchange_icon(arb.get(' '))}\n"
+        f"🔻 <b>BUY:</b> {arb['buy_exchange']}  — ${arb['buy_price']} {exchange_icon(arb.get('type_buy'))}\n"
+        f"🔺 <b>SELL:</b> {arb['sell_exchange']} — ${arb['sell_price']} {exchange_icon(arb.get('type_sell'))}\n"
         f"💰 {arb['net_profit']}% → ~{arb['usdt_profit']} USDT (100$)\n"
         f"📊 <b>Volume:</b> {arb['volume']} USDT"
     )
@@ -95,7 +96,7 @@ def build_exchange_links(arb):
 
 def build_blur_exchange_links(arb):
     buttons = [
-        InlineKeyboardButton(f"🔻 Купити на {blur(arb['buy_exchange'])}", url=""),  # прибрав посилання на your_bot
+        InlineKeyboardButton(f"🔻 Купити на {blur(arb['buy_exchange'])}", url=""),
         InlineKeyboardButton(f"🔺 Продати на {blur(arb['sell_exchange'])}", url="")
     ]
     return InlineKeyboardMarkup([buttons])

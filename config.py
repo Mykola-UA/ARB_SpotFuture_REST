@@ -19,7 +19,22 @@ DAYS = {
     "sub_30": 30
 }
 
-MIN_PROFIT = float(os.getenv("MIN_PROFIT", "3"))
+MIN_PROFIT = float(os.getenv("MIN_PROFIT", "3"))  # Відсоток мін. прибутку
 
 def is_admin(chat_id):
     return int(chat_id) in ADMIN_CHAT_IDS
+
+# ---- MOCK ФУНКЦІЇ ДЛЯ СУМІСНОСТІ (для початку роботи бота) ----
+
+def is_paid(user_id):
+    # TODO: заміни на справжню перевірку оплати/підписки
+    return True
+
+def get_users():
+    # TODO: заміни на справжнє отримання користувачів
+    return []
+
+# Якщо get_status не в notify.subscriptions, можна додати:
+def get_status(user_id):
+    return "Ваша підписка активна!" if is_paid(user_id) else "Ваша підписка неактивна."
+

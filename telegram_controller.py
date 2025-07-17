@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 from datetime import datetime
 from telegram import Update
@@ -11,9 +10,8 @@ from core.arbitrage_engine import find_arbitrage_opportunities
 from notify.telegram_notify import format_arb_message
 
 load_dotenv()
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-ALLOWED_CHAT_IDS = os.getenv("ALLOWED_CHAT_IDS", "").split(",")
+ALLOWED_CHAT_IDS = [x.strip() for x in os.getenv("ALLOWED_CHAT_IDS", "").split(",") if x.strip().isdigit()]
 
 bot_running = False
 background_task = None
@@ -35,8 +33,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Бот запущено!")
     bot_running = True
 
-    loop = asyncio.get_event_loop()
-    background_task = loop.create_task(asyncio.to_thread(run_bot_loop))
+    background_task = asyncio.create_task(run_bot_loop(context.bot, update.effective_chat.id))
 
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global bot_running, background_task
@@ -70,9 +67,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = format_arb_message(arb)
         await update.message.reply_text(msg, parse_mode="HTML")
 
-def run_bot_loop():
-    from notify.telegram_notify import send_telegram_message
-
+async def run_bot_loop(bot, chat_id):
+    global bot_running
     while bot_running:
         print("🟡 Telegram loop: збір цін...")
         spot_data = fetch_live_prices()
@@ -83,9 +79,12 @@ def run_bot_loop():
 
         for arb in arbs[:5]:
             msg = format_arb_message(arb)
-            send_telegram_message(msg)
+            try:
+                await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+            except Exception as e:
+                print(f"❗️ Не вдалося надіслати повідомлення: {e}")
 
-        time.sleep(60)
+        await asyncio.sleep(60)
 
 def run_telegram_controller():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
@@ -94,3 +93,6 @@ def run_telegram_controller():
     app.add_handler(CommandHandler("status", status_command))
     print("🤖 Telegram-контролер запущено.")
     app.run_polling()
+
+if __name__ == "__main__":
+    run_telegram_controller()

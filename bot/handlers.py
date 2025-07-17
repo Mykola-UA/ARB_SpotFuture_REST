@@ -10,10 +10,17 @@ from telegram import (
 from telegram.ext import ContextTypes
 
 from config import (
-    USDT_PRICE, DAYS,
-    is_admin, MIN_PROFIT
+    USDT_PRICE,
+    DAYS,
+    is_admin,
+    MIN_PROFIT,
 )
-from notify.subscriptions import set_paid, is_paid, get_users, get_status
+from notify.subscriptions import (
+    set_paid,
+    is_paid,
+    get_users,
+    get_status,
+)
 from core.price_collector import get_bad_exchanges
 from core.arbitrage_runner import arbitrage_loop, stop_arbitrage_loop
 from utils.cryptopay_api import create_cryptopay_invoice
@@ -36,12 +43,12 @@ async def user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("▶️ START", callback_data="show_status")],
             [InlineKeyboardButton("💎 Subscribe", callback_data="subscribe")],
-            [InlineKeyboardButton("❓ Help", callback_data="show_help")]
+            [InlineKeyboardButton("❓ Help", callback_data="show_help")],
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
             "Welcome! Subscribe to see signals from just 1 USDT.",
-            reply_markup=markup
+            reply_markup=markup,
         )
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -61,7 +68,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         await query.edit_message_text(
             "Choose a subscription plan:",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
 
     elif data in ("sub_1", "sub_7", "sub_30"):
@@ -69,7 +76,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price = USDT_PRICE[data]
         buttons = [
             [InlineKeyboardButton("💸 Pay USDT via CryptoBot", callback_data=f"{data}_CRYPTOPAY")],
-            [InlineKeyboardButton("⭐ Pay with STARS", callback_data=f"{data}_STARS")]
+            [InlineKeyboardButton("⭐ Pay with STARS", callback_data=f"{data}_STARS")],
         ]
         await query.edit_message_text(
             f"<b>Choose how to pay for your subscription ({price} USDT / {days} day(s)):</b>\n"
@@ -77,11 +84,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "- ⭐ STARS: pay via Telegram (Apple Pay/Google Pay/Credit Card)\n\n"
             "<i>After payment, your subscription is activated automatically.</i>",
             parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
 
     elif any(data.startswith(sub) and data.endswith("_CRYPTOPAY") for sub in ("sub_1", "sub_7", "sub_30")):
-        sub_type = data.split("_")[0] + "_" + data.split("_")[1]
+        sub_type = "_".join(data.split("_")[:2])
         price = USDT_PRICE[sub_type]
         days = DAYS[sub_type]
         try:
@@ -100,7 +107,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
     elif any(data.startswith(sub) and data.endswith("_STARS") for sub in ("sub_1", "sub_7", "sub_30")):
-        sub_type = data.split("_")[0] + "_" + data.split("_")[1]
+        sub_type = "_".join(data.split("_")[:2])
         price_stars = int(float(USDT_PRICE[sub_type]) * 143)
         days = DAYS[sub_type]
 

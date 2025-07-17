@@ -1,3 +1,5 @@
+import pandas as pd
+from datetime import datetime
 from utils.fees import EXCHANGE_FEES
 
 MIN_PRICE = 0.001
@@ -15,14 +17,17 @@ ALLOWED_TYPE_COMBOS = [
 ]
 
 def find_arbitrage_opportunities(spot_data):
-    import pandas as pd
-    from datetime import datetime
-
+    """
+    Знаходить арбітражні можливості на основі даних з бірж.
+    :param spot_data: список словників з полями symbol, price, volume, type, exchange
+    :return: список арбітражних ситуацій
+    """
     if not spot_data:
         return []
 
     df = pd.DataFrame(spot_data)
 
+    # Фільтруємо за ціною та обсягом
     df = df[
         (df["price"] >= MIN_PRICE) &
         (df["price"] <= MAX_PRICE) &
@@ -55,7 +60,7 @@ def find_arbitrage_opportunities(spot_data):
                 sell_fee = EXCHANGE_FEES.get(sell["exchange"], 0.1)
                 net_profit = spread - (buy_fee + sell_fee)
 
-                # ✅ Фільтр 2% < net_profit < 7%
+                # ✅ Фільтр 3% < net_profit < 7%
                 if net_profit < MIN_NET_PROFIT or net_profit > MAX_NET_PROFIT:
                     continue
 
@@ -70,7 +75,7 @@ def find_arbitrage_opportunities(spot_data):
                     "price_diff": round(sell_price - buy_price, 6),
                     "spread": round(spread, 2),
                     "net_profit": round(net_profit, 2),
-                    "usdt_profit": round((net_profit / 100) * 100, 2),
+                    "usdt_profit": round((net_profit / 100) * 100, 2),  # на 100 USDT
                     "volume": round(volume, 2),
                     "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
                 })

@@ -12,10 +12,10 @@ from notify.telegram_notify import (
 from config import is_admin, is_paid, get_users, MIN_PROFIT
 
 SENT_SIGNALS_TIME_FILE = "sent_signals_time.json"
-ANTI_DUPLICATE_MINUTES = 60  # не дублювати мінімум 60 хв
+ANTI_DUPLICATE_MINUTES = 60  # не дублювати один і той же сигнал мінімум 60 хв
 
 def make_signal_id(arb):
-    # Тільки унікальна пара: symbol|buy_exchange|sell_exchange|type_buy|type_sell
+    # Унікальний ID сигналу для антидублікатів
     return f"{arb['symbol']}|{arb['buy_exchange']}|{arb['sell_exchange']}|{arb.get('type_buy','')}|{arb.get('type_sell','')}"
 
 def load_sent_signals_time():
@@ -61,7 +61,7 @@ async def arbitrage_loop(app):
                 except Exception:
                     pass
             if skip:
-                continue  # Не дублювати сигнал!
+                continue  # Не дублювати сигнал
 
             for chat_id in users:
                 if is_admin(chat_id) or is_paid(chat_id):
