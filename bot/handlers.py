@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-import time
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
@@ -14,6 +13,16 @@ from core.arbitrage_runner import arbitrage_loop, stop_arbitrage_loop
 from utils.cryptopay_api import create_cryptopay_invoice
 
 arbitrage_task = None
+
+# --- Вставка: функція нотифікації для всіх адміністраторів ---
+ADMIN_CHAT_IDS = [int(x) for x in os.getenv("ADMIN_CHAT_IDS", "").split(",") if x.strip()]
+
+async def notify_admins(context: ContextTypes.DEFAULT_TYPE, message: str):
+    for admin_id in ADMIN_CHAT_IDS:
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=message)
+        except Exception as e:
+            print(f"❌ Не вдалося надіслати адміну {admin_id}: {e}")
 
 async def user_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_chat.id
@@ -135,6 +144,8 @@ async def stopbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stop_arbitrage_loop()
     arbitrage_task.cancel()
     await update.message.reply_text("🛑 Stopped.")
+    # --- Повідомлення всім адміністраторам ---
+    await notify_admins(context, f"🛑 Арбітраж зупинено адміністратором {update.effective_chat.id}")
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global arbitrage_task
@@ -163,4 +174,3 @@ async def restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text("🔄 Restarting...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
-
