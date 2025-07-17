@@ -14,6 +14,8 @@ def is_admin(chat_id):
     return int(chat_id) in ADMIN_CHAT_IDS
 
 # --- Subscription/Payment Settings ---
+
+# CryptoPay API Token (для оплати через @CryptoBot)
 CRYPTO_PAY_API_TOKEN = os.getenv("CRYPTO_PAY_API_TOKEN")
 
 # --- Tariffs ---
@@ -29,7 +31,9 @@ DAYS = {
 }
 
 # --- Subscription Functions (підключення) ---
-from notify.subscriptions import set_paid, is_paid, get_users, get_status
+from notify.subscriptions import set_paid, is_paid, get_users
+# !!! Не потрібно імпортувати DAYS з notify.subscriptions!
+# Якщо десь є from notify.subscriptions import DAYS — прибери!
 
 # --- Мінімальний % прибутку для сигналу ---
 MIN_PROFIT = float(os.getenv("MIN_PROFIT", "3"))
