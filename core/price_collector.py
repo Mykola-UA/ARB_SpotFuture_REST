@@ -35,6 +35,7 @@ def log_bad_exchange(exchange, reason, exception=None):
     dt = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     log_line = f"{dt} | {exchange}: {reason}"
     if exception:
+        # Якщо це ccxt error — може бути code (429, 403, ...):
         error_code = getattr(exception, "code", None)
         log_line += f" | Exception: {repr(exception)}"
         if error_code:
