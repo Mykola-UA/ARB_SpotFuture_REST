@@ -37,7 +37,7 @@ DAYS = {
 from notify.subscriptions import set_paid, is_paid, get_users, get_status
 
 # --- Мінімальний % прибутку для сигналу ---
-MIN_PROFIT = float(os.getenv("MIN_PROFIT", "3"))
+MIN_PROFIT = float(os.getenv("MIN_PROFIT", "4"))
 
 
 # --- Language functions (залишено для локалізації, якщо треба) ---
