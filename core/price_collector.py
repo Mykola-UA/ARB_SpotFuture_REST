@@ -3,14 +3,14 @@ from datetime import datetime, timezone
 import traceback
 
 from exchanges.binance import fetch_binance_prices
-from exchanges.bybit import fetch_bybit_prices
+from error.bybit import fetch_bybit_prices
 from exchanges.kucoin import fetch_kucoin_prices
 from exchanges.mexc import fetch_mexc_prices
 from exchanges.bitget import fetch_bitget_prices
 from exchanges.bitmart import fetch_bitmart_prices
 from exchanges.htx import fetch_htx_prices
 from exchanges.gate import fetch_gate_prices
-from exchanges.coinex import fetch_coinex_prices
+from error.coinex import fetch_coinex_prices
 from exchanges.bingx import fetch_bingx_prices
 from exchanges.whitebit import fetch_whitebit_prices
 
