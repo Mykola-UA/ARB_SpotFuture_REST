@@ -3,8 +3,8 @@ from utils.fees import EXCHANGE_FEES
 MIN_PRICE = 0.001
 MAX_PRICE = 5.0
 MIN_VOLUME = 10000
-MIN_NET_PROFIT = 2.0
-MAX_NET_PROFIT = 4.0  # ✅ не більше 7%
+MIN_NET_PROFIT = 3.0
+MAX_NET_PROFIT = 10.0  # ✅ не більше 10%
 
 # Дозволені комбінації типів ринку: (buy_type, sell_type)
 ALLOWED_TYPE_COMBOS = [
